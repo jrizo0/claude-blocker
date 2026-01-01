@@ -55,20 +55,20 @@ class SessionState {
           lastActivity: new Date(),
           cwd: payload.cwd,
         });
-        console.log(`[State] Session started: ${session_id}`);
+        console.log("Claude Code session connected");
         break;
 
       case "SessionEnd":
         this.sessions.delete(session_id);
-        console.log(`[State] Session ended: ${session_id}`);
+        console.log("Claude Code session disconnected");
         break;
 
       case "UserPromptSubmit":
         this.ensureSession(session_id, payload.cwd);
         const promptSession = this.sessions.get(session_id)!;
         promptSession.status = "working";
+        promptSession.waitingForInputSince = undefined;
         promptSession.lastActivity = new Date();
-        console.log(`[State] Session working: ${session_id} (UserPromptSubmit)`);
         break;
 
       case "PreToolUse":
@@ -77,14 +77,16 @@ class SessionState {
         // Check if this is a user input tool
         if (payload.tool_name && USER_INPUT_TOOLS.includes(payload.tool_name)) {
           toolSession.status = "waiting_for_input";
-          console.log(
-            `[State] Session waiting for input: ${session_id} (${payload.tool_name})`
-          );
+          toolSession.waitingForInputSince = new Date();
+        } else if (toolSession.status === "waiting_for_input") {
+          // If waiting for input, only reset after 500ms (to ignore immediate tool calls like Edit)
+          const elapsed = Date.now() - (toolSession.waitingForInputSince?.getTime() ?? 0);
+          if (elapsed > 500) {
+            toolSession.status = "working";
+            toolSession.waitingForInputSince = undefined;
+          }
         } else {
           toolSession.status = "working";
-          console.log(
-            `[State] Session working: ${session_id} (PreToolUse: ${payload.tool_name})`
-          );
         }
         toolSession.lastActivity = new Date();
         break;
@@ -92,12 +94,15 @@ class SessionState {
       case "Stop":
         this.ensureSession(session_id, payload.cwd);
         const idleSession = this.sessions.get(session_id)!;
-        // Don't reset to idle if waiting for user input - preserve that state
-        if (idleSession.status !== "waiting_for_input") {
-          idleSession.status = "idle";
-          console.log(`[State] Session idle: ${session_id}`);
+        if (idleSession.status === "waiting_for_input") {
+          // If waiting for input, only reset after 500ms (to ignore immediate Stop after AskUserQuestion)
+          const elapsed = Date.now() - (idleSession.waitingForInputSince?.getTime() ?? 0);
+          if (elapsed > 500) {
+            idleSession.status = "idle";
+            idleSession.waitingForInputSince = undefined;
+          }
         } else {
-          console.log(`[State] Session still waiting for input: ${session_id}`);
+          idleSession.status = "idle";
         }
         idleSession.lastActivity = new Date();
         break;
@@ -114,7 +119,7 @@ class SessionState {
         lastActivity: new Date(),
         cwd,
       });
-      console.log(`[State] Session auto-registered: ${sessionId}`);
+      console.log("Claude Code session connected");
     }
   }
 
@@ -126,7 +131,6 @@ class SessionState {
       if (now - session.lastActivity.getTime() > SESSION_TIMEOUT_MS) {
         this.sessions.delete(id);
         removed++;
-        console.log(`[State] Session timed out: ${id}`);
       }
     }
 

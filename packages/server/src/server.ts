@@ -52,8 +52,7 @@ export function startServer(port: number = DEFAULT_PORT): void {
 
         state.handleHook(payload);
         sendJson(res, { ok: true });
-      } catch (error) {
-        console.error("[Server] Error processing hook:", error);
+      } catch {
         sendJson(res, { error: "Invalid JSON" }, 400);
       }
       return;
@@ -67,7 +66,7 @@ export function startServer(port: number = DEFAULT_PORT): void {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
   wss.on("connection", (ws: WebSocket) => {
-    console.log("[WS] Client connected");
+    console.log("Extension connected");
 
     // Subscribe to state changes
     const unsubscribe = state.subscribe((message) => {
@@ -89,38 +88,36 @@ export function startServer(port: number = DEFAULT_PORT): void {
     });
 
     ws.on("close", () => {
-      console.log("[WS] Client disconnected");
+      console.log("Extension disconnected");
       unsubscribe();
     });
 
-    ws.on("error", (error) => {
-      console.error("[WS] Error:", error);
+    ws.on("error", () => {
       unsubscribe();
     });
   });
 
   server.listen(port, () => {
     console.log(`
-┌─────────────────────────────────────────────────┐
-│                                                 │
-│   Claude Blocker Server                         │
-│                                                 │
-│   HTTP:      http://localhost:${port}             │
-│   WebSocket: ws://localhost:${port}/ws            │
-│                                                 │
-│   Waiting for Claude Code hooks...              │
-│                                                 │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────┐
+│                                     │
+│   Claude Blocker Server             │
+│                                     │
+│   HTTP:      http://localhost:${port}  │
+│   WebSocket: ws://localhost:${port}/ws │
+│                                     │
+│   Waiting for Claude Code hooks...  │
+│                                     │
+└─────────────────────────────────────┘
 `);
   });
 
-  // Graceful shutdown
-  process.on("SIGINT", () => {
-    console.log("\n[Server] Shutting down...");
+  // Graceful shutdown - use once to prevent stacking handlers
+  process.once("SIGINT", () => {
+    console.log("\nShutting down...");
     state.destroy();
     wss.close();
-    server.close(() => {
-      process.exit(0);
-    });
+    server.close();
+    process.exit(0);
   });
 }

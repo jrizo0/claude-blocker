@@ -18,6 +18,7 @@ export interface Session {
   id: string;
   status: "idle" | "working" | "waiting_for_input";
   lastActivity: Date;
+  waitingForInputSince?: Date;
   cwd?: string;
 }
 

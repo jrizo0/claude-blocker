@@ -1,6 +1,7 @@
 export {};
 
 const MODAL_ID = "claude-blocker-modal";
+const TOAST_ID = "claude-blocker-toast";
 const DEFAULT_DOMAINS = ["x.com", "youtube.com"];
 
 // State shape from service worker
@@ -17,6 +18,7 @@ interface PublicState {
 let lastKnownState: PublicState | null = null;
 let shouldBeBlocked = false;
 let blockedDomains: string[] = [];
+let toastDismissed = false;
 
 // Load domains from storage
 function loadDomains(): Promise<string[]> {
@@ -120,6 +122,38 @@ function removeModal(): void {
   getModal()?.remove();
 }
 
+function getToast(): HTMLElement | null {
+  return document.getElementById(TOAST_ID);
+}
+
+function showToast(): void {
+  if (getToast() || toastDismissed) return;
+
+  const container = document.createElement("div");
+  container.id = TOAST_ID;
+  const shadow = container.attachShadow({ mode: "open" });
+
+  shadow.innerHTML = `
+    <div style="all:initial;position:fixed;bottom:24px;right:24px;background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:16px 20px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#fff;z-index:2147483647;display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3);-webkit-font-smoothing:antialiased;">
+      <span style="font-size:18px;">💬</span>
+      <span>Claude has a question for you!</span>
+      <button id="dismiss" style="all:initial;margin-left:8px;padding:4px 8px;background:#333;border:none;border-radius:6px;color:#888;font-family:Arial,Helvetica,sans-serif;font-size:12px;cursor:pointer;">Dismiss</button>
+    </div>
+  `;
+
+  const dismissBtn = shadow.getElementById("dismiss");
+  dismissBtn?.addEventListener("click", () => {
+    toastDismissed = true;
+    removeToast();
+  });
+
+  document.documentElement.appendChild(container);
+}
+
+function removeToast(): void {
+  getToast()?.remove();
+}
+
 // Watch for our modal being removed by the page and re-add it
 function setupMutationObserver(): void {
   const observer = new MutationObserver(() => {
@@ -167,11 +201,6 @@ function renderState(state: PublicState): void {
     setDotColor(dot, "green");
     status.textContent = "Waiting for Claude Code";
     hint.textContent = "Open a terminal and start Claude Code";
-  } else if (state.waitingForInput > 0) {
-    message.textContent = "Claude has a question for you!";
-    setDotColor(dot, "green");
-    status.textContent = `${state.waitingForInput} waiting for input`;
-    hint.textContent = "Check your terminal — Claude needs your response";
   } else {
     message.textContent = "Your job finished!";
     setDotColor(dot, "green");
@@ -203,9 +232,19 @@ function handleState(state: PublicState): void {
   if (!isBlockedDomain()) {
     shouldBeBlocked = false;
     removeModal();
+    removeToast();
     return;
   }
 
+  // Show toast notification when Claude has a question (non-blocking)
+  if (state.waitingForInput > 0) {
+    showToast();
+  } else {
+    toastDismissed = false; // Reset so next question can show toast
+    removeToast();
+  }
+
+  // Show blocking modal when truly idle
   if (state.blocked) {
     shouldBeBlocked = true;
     createModal();
