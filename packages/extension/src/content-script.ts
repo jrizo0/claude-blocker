@@ -8,6 +8,7 @@ interface PublicState {
   serverConnected: boolean;
   sessions: number;
   working: number;
+  waitingForInput: number;
   blocked: boolean;
   bypassActive: boolean;
 }
@@ -166,10 +167,15 @@ function renderState(state: PublicState): void {
     setDotColor(dot, "green");
     status.textContent = "Waiting for Claude Code";
     hint.textContent = "Open a terminal and start Claude Code";
-  } else {
-    message.textContent = `${state.sessions} session${state.sessions > 1 ? "s" : ""} idle. Start a prompt to unblock.`;
+  } else if (state.waitingForInput > 0) {
+    message.textContent = "Claude has a question for you!";
     setDotColor(dot, "green");
-    status.textContent = `${state.sessions} idle`;
+    status.textContent = `${state.waitingForInput} waiting for input`;
+    hint.textContent = "Check your terminal — Claude needs your response";
+  } else {
+    message.textContent = "Your job finished!";
+    setDotColor(dot, "green");
+    status.textContent = `${state.sessions} session${state.sessions > 1 ? "s" : ""} idle`;
     hint.textContent = "Type a prompt in Claude Code to unblock";
   }
 }

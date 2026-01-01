@@ -117,6 +117,28 @@ export function setupHooks(): void {
 `);
 }
 
+export function areHooksConfigured(): boolean {
+  const settingsPath = join(homedir(), ".claude", "settings.json");
+
+  if (!existsSync(settingsPath)) {
+    return false;
+  }
+
+  try {
+    const content = readFileSync(settingsPath, "utf-8");
+    const settings: ClaudeSettings = JSON.parse(content);
+
+    if (!settings.hooks) {
+      return false;
+    }
+
+    // Check if at least one of our hooks is configured
+    return Object.keys(HOOKS_CONFIG).some((hookName) => hookName in settings.hooks!);
+  } catch {
+    return false;
+  }
+}
+
 export function removeHooks(): void {
   const settingsPath = join(homedir(), ".claude", "settings.json");
 

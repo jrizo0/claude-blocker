@@ -10,6 +10,7 @@ interface State {
   serverConnected: boolean;
   sessions: number;
   working: number;
+  waitingForInput: number;
   bypassUntil: number | null;
 }
 
@@ -17,6 +18,7 @@ const state: State = {
   serverConnected: false,
   sessions: 0,
   working: 0,
+  waitingForInput: 0,
   bypassUntil: null,
 };
 
@@ -41,6 +43,7 @@ function getPublicState() {
     serverConnected: state.serverConnected,
     sessions: state.sessions,
     working: state.working,
+    waitingForInput: state.waitingForInput,
     blocked: shouldBlock,
     bypassActive,
     bypassUntil: state.bypassUntil,
@@ -81,6 +84,7 @@ function connect() {
         if (msg.type === "state") {
           state.sessions = msg.sessions;
           state.working = msg.working;
+          state.waitingForInput = msg.waitingForInput ?? 0;
           broadcast();
         }
       } catch {}

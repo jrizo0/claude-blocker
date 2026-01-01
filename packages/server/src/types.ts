@@ -16,15 +16,28 @@ export interface HookPayload {
 // Session state tracked by server
 export interface Session {
   id: string;
-  status: "idle" | "working";
+  status: "idle" | "working" | "waiting_for_input";
   lastActivity: Date;
   cwd?: string;
 }
 
 // WebSocket messages from server to extension
 export type ServerMessage =
-  | { type: "state"; blocked: boolean; sessions: number; working: number }
+  | {
+      type: "state";
+      blocked: boolean;
+      sessions: number;
+      working: number;
+      waitingForInput: number;
+    }
   | { type: "pong" };
+
+// Tools that indicate Claude is waiting for user input
+export const USER_INPUT_TOOLS = [
+  "AskUserQuestion",
+  "ask_user",
+  "ask_human",
+];
 
 // WebSocket messages from extension to server
 export type ClientMessage = { type: "ping" } | { type: "subscribe" };

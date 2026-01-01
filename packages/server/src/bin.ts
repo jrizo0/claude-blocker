@@ -1,10 +1,25 @@
 #!/usr/bin/env node
 
+import { createInterface } from "readline";
 import { startServer } from "./server.js";
-import { setupHooks, removeHooks } from "./setup.js";
+import { setupHooks, removeHooks, areHooksConfigured } from "./setup.js";
 import { DEFAULT_PORT } from "@claude-blocker/shared";
 
 const args = process.argv.slice(2);
+
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
 
 function printHelp(): void {
   console.log(`
@@ -14,19 +29,18 @@ Usage:
   npx claude-blocker [options]
 
 Options:
-  --setup     Configure Claude Code hooks (run once)
+  --setup     Configure Claude Code hooks
   --remove    Remove Claude Code hooks
   --port      Server port (default: ${DEFAULT_PORT})
   --help      Show this help message
 
 Examples:
-  npx claude-blocker --setup    # Configure hooks (first time)
-  npx claude-blocker            # Start the server
+  npx claude-blocker            # Start the server (prompts for setup on first run)
   npx claude-blocker --port 9000
 `);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   if (args.includes("--help") || args.includes("-h")) {
     printHelp();
     process.exit(0);
@@ -52,6 +66,20 @@ function main(): void {
     } else {
       console.error("Invalid port number");
       process.exit(1);
+    }
+  }
+
+  // Check if hooks are configured, prompt for setup if not
+  if (!areHooksConfigured()) {
+    console.log("Claude Blocker hooks are not configured yet.\n");
+    const answer = await prompt("Would you like to set them up now? (Y/n) ");
+    const normalized = answer.trim().toLowerCase();
+
+    if (normalized === "" || normalized === "y" || normalized === "yes") {
+      setupHooks();
+      console.log(""); // Add spacing before server start
+    } else {
+      console.log("\nSkipping setup. You can run 'npx claude-blocker --setup' later.\n");
     }
   }
 
