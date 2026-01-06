@@ -16,6 +16,13 @@ interface BypassStatus {
   bypassUntil: number | null;
 }
 
+interface WorkHoursSettings {
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+  days: number[];
+}
+
 // Elements
 const statusIndicator = document.getElementById("status-indicator") as HTMLElement;
 const statusText = document.getElementById("status-text") as HTMLElement;
@@ -31,8 +38,22 @@ const bypassBtn = document.getElementById("bypass-btn") as HTMLButtonElement;
 const bypassText = document.getElementById("bypass-text") as HTMLElement;
 const bypassStatus = document.getElementById("bypass-status") as HTMLElement;
 
+// Work hours elements
+const workHoursEnabled = document.getElementById("work-hours-enabled") as HTMLInputElement;
+const workHoursContent = document.getElementById("work-hours-content") as HTMLElement;
+const startTimeInput = document.getElementById("start-time") as HTMLInputElement;
+const endTimeInput = document.getElementById("end-time") as HTMLInputElement;
+const workHoursStatus = document.getElementById("work-hours-status") as HTMLElement;
+const dayButtons = document.querySelectorAll(".day-btn") as NodeListOf<HTMLButtonElement>;
+
 let bypassCountdown: ReturnType<typeof setInterval> | null = null;
 let currentDomains: string[] = [];
+let currentWorkHours: WorkHoursSettings = {
+  enabled: true,
+  startTime: "10:00",
+  endTime: "17:00",
+  days: [1, 2, 3, 4, 5],
+};
 
 // Load domains from storage
 async function loadDomains(): Promise<string[]> {
@@ -148,6 +169,66 @@ async function removeDomain(domain: string): Promise<void> {
   renderDomains();
 }
 
+// Load work hours settings
+async function loadWorkHours(): Promise<WorkHoursSettings> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "GET_WORK_HOURS" }, (result) => {
+      if (result) {
+        resolve(result);
+      } else {
+        resolve(currentWorkHours);
+      }
+    });
+  });
+}
+
+// Save work hours settings
+async function saveWorkHours(): Promise<void> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "UPDATE_WORK_HOURS", workHours: currentWorkHours }, () => {
+      resolve();
+    });
+  });
+}
+
+// Render work hours UI
+function renderWorkHours(): void {
+  workHoursEnabled.checked = currentWorkHours.enabled;
+  workHoursContent.style.opacity = currentWorkHours.enabled ? "1" : "0.5";
+  workHoursContent.style.pointerEvents = currentWorkHours.enabled ? "auto" : "none";
+
+  startTimeInput.value = currentWorkHours.startTime;
+  endTimeInput.value = currentWorkHours.endTime;
+
+  dayButtons.forEach((btn) => {
+    const day = parseInt(btn.dataset.day || "0", 10);
+    if (currentWorkHours.days.includes(day)) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  updateWorkHoursStatus();
+}
+
+// Update work hours status text
+function updateWorkHoursStatus(): void {
+  if (!currentWorkHours.enabled) {
+    workHoursStatus.textContent = "Blocking always active";
+    return;
+  }
+
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const activeDays = currentWorkHours.days.sort().map((d) => dayNames[d]).join(", ");
+
+  if (currentWorkHours.days.length === 0) {
+    workHoursStatus.textContent = "No days selected - blocking disabled";
+  } else {
+    workHoursStatus.textContent = `Active ${currentWorkHours.startTime} - ${currentWorkHours.endTime} on ${activeDays}`;
+  }
+}
+
 // Update UI with extension state
 function updateUI(state: ExtensionState): void {
   // Status badge
@@ -249,6 +330,41 @@ bypassBtn.addEventListener("click", () => {
   });
 });
 
+// Work hours event listeners
+workHoursEnabled.addEventListener("change", async () => {
+  currentWorkHours.enabled = workHoursEnabled.checked;
+  renderWorkHours();
+  await saveWorkHours();
+});
+
+startTimeInput.addEventListener("change", async () => {
+  currentWorkHours.startTime = startTimeInput.value;
+  updateWorkHoursStatus();
+  await saveWorkHours();
+});
+
+endTimeInput.addEventListener("change", async () => {
+  currentWorkHours.endTime = endTimeInput.value;
+  updateWorkHoursStatus();
+  await saveWorkHours();
+});
+
+dayButtons.forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const day = parseInt(btn.dataset.day || "0", 10);
+    const idx = currentWorkHours.days.indexOf(day);
+    if (idx >= 0) {
+      currentWorkHours.days.splice(idx, 1);
+      btn.classList.remove("active");
+    } else {
+      currentWorkHours.days.push(day);
+      btn.classList.add("active");
+    }
+    updateWorkHoursStatus();
+    await saveWorkHours();
+  });
+});
+
 // Listen for state broadcasts
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "STATE") {
@@ -260,6 +376,8 @@ chrome.runtime.onMessage.addListener((message) => {
 async function init(): Promise<void> {
   currentDomains = await loadDomains();
   renderDomains();
+  currentWorkHours = await loadWorkHours();
+  renderWorkHours();
   refreshState();
 }
 

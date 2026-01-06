@@ -89,6 +89,49 @@
           </ul>
         </section>
 
+        <!-- Work Hours Section -->
+        <section class="work-hours-section">
+          <div class="section-header">
+            <div class="section-title">
+              <h2>Work Hours</h2>
+              <p class="section-desc">Only block sites during these hours</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="work-hours-enabled" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="work-hours-content" id="work-hours-content">
+            <div class="time-row">
+              <div class="time-input-group">
+                <label for="start-time">Start</label>
+                <input type="time" id="start-time" value="10:00" />
+              </div>
+              <span class="time-separator">to</span>
+              <div class="time-input-group">
+                <label for="end-time">End</label>
+                <input type="time" id="end-time" value="17:00" />
+              </div>
+            </div>
+
+            <div class="days-row">
+              <label class="day-label">Days</label>
+              <div class="days-grid">
+                <button type="button" class="day-btn" data-day="0">S</button>
+                <button type="button" class="day-btn active" data-day="1">M</button>
+                <button type="button" class="day-btn active" data-day="2">T</button>
+                <button type="button" class="day-btn active" data-day="3">W</button>
+                <button type="button" class="day-btn active" data-day="4">T</button>
+                <button type="button" class="day-btn active" data-day="5">F</button>
+                <button type="button" class="day-btn" data-day="6">S</button>
+              </div>
+            </div>
+
+            <p class="work-hours-status" id="work-hours-status">Blocking active during work hours</p>
+          </div>
+        </section>
+
         <!-- Bypass Section -->
         <section class="bypass-section">
           <div class="section-header">

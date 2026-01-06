@@ -5,6 +5,21 @@ const KEEPALIVE_INTERVAL = 20_000;
 const RECONNECT_BASE_DELAY = 1_000;
 const RECONNECT_MAX_DELAY = 30_000;
 
+// Work hours settings
+interface WorkHoursSettings {
+  enabled: boolean;
+  startTime: string; // "HH:MM" format
+  endTime: string; // "HH:MM" format
+  days: number[]; // 0-6, where 0 = Sunday
+}
+
+const DEFAULT_WORK_HOURS: WorkHoursSettings = {
+  enabled: true,
+  startTime: "10:00",
+  endTime: "17:00",
+  days: [1, 2, 3, 4, 5], // Monday-Friday
+};
+
 // The actual state - service worker is single source of truth
 interface State {
   serverConnected: boolean;
@@ -12,6 +27,7 @@ interface State {
   working: number;
   waitingForInput: number;
   bypassUntil: number | null;
+  workHours: WorkHoursSettings;
 }
 
 const state: State = {
@@ -20,6 +36,7 @@ const state: State = {
   working: 0,
   waitingForInput: 0,
   bypassUntil: null,
+  workHours: { ...DEFAULT_WORK_HOURS },
 };
 
 let websocket: WebSocket | null = null;
@@ -27,10 +44,35 @@ let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 let retryCount = 0;
 
-// Load bypass from storage on startup
-chrome.storage.sync.get(["bypassUntil"], (result) => {
+// Check if current time is within work hours
+function isWithinWorkHours(): boolean {
+  if (!state.workHours.enabled) return true; // If disabled, always allow blocking
+
+  const now = new Date();
+  const currentDay = now.getDay();
+  const currentTime = now.getHours() * 60 + now.getMinutes();
+
+  // Check if today is a work day
+  if (!state.workHours.days.includes(currentDay)) {
+    return false;
+  }
+
+  // Parse start and end times
+  const [startHour, startMin] = state.workHours.startTime.split(":").map(Number);
+  const [endHour, endMin] = state.workHours.endTime.split(":").map(Number);
+  const startMinutes = startHour * 60 + startMin;
+  const endMinutes = endHour * 60 + endMin;
+
+  return currentTime >= startMinutes && currentTime < endMinutes;
+}
+
+// Load settings from storage on startup
+chrome.storage.sync.get(["bypassUntil", "workHours"], (result) => {
   if (result.bypassUntil && result.bypassUntil > Date.now()) {
     state.bypassUntil = result.bypassUntil;
+  }
+  if (result.workHours) {
+    state.workHours = result.workHours;
   }
 });
 
@@ -39,7 +81,9 @@ function getPublicState() {
   const bypassActive = state.bypassUntil !== null && state.bypassUntil > Date.now();
   // Don't block if waiting for input - only block when truly idle
   const isIdle = state.working === 0 && state.waitingForInput === 0;
-  const shouldBlock = !bypassActive && (isIdle || !state.serverConnected);
+  // Only block during work hours (if work hours are enabled)
+  const withinWorkHours = isWithinWorkHours();
+  const shouldBlock = !bypassActive && withinWorkHours && (isIdle || !state.serverConnected);
 
   return {
     serverConnected: state.serverConnected,
@@ -49,6 +93,8 @@ function getPublicState() {
     blocked: shouldBlock,
     bypassActive,
     bypassUntil: state.bypassUntil,
+    workHours: state.workHours,
+    withinWorkHours,
   };
 }
 
@@ -163,6 +209,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         bypassUntil: state.bypassUntil,
       });
     });
+    return true;
+  }
+
+  if (message.type === "GET_WORK_HOURS") {
+    sendResponse(state.workHours);
+    return true;
+  }
+
+  if (message.type === "UPDATE_WORK_HOURS") {
+    state.workHours = message.workHours;
+    chrome.storage.sync.set({ workHours: message.workHours });
+    broadcast();
+    sendResponse({ success: true });
     return true;
   }
 
